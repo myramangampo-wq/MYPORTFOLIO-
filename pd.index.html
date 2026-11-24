@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PetalDrift | Relaxing Click Mini-Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Alex+Brush&family=Fredoka:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; user-select: none; }
+        .font-calligraphy { font-family: 'Alex Brush', cursive; }
+        .font-game { font-family: 'Fredoka', sans-serif; }
+
+        @keyframes floatDrift {
+            0% { transform: translateY(0px) translateX(0px) rotate(0deg); }
+            50% { transform: translateY(-14px) translateX(8px) rotate(6deg); }
+            100% { transform: translateY(0px) translateX(0px) rotate(0deg); }
+        }
+
+        @keyframes popFade {
+            0% { opacity: 1; transform: translate(-50%, -20%) scale(0.9); }
+            100% { opacity: 0; transform: translate(-50%, -120%) scale(1.15); }
+        }
+
+        .drift-anim {
+            animation: floatDrift var(--dur, 5s) ease-in-out infinite;
+        }
+
+        .pop-text {
+            animation: popFade 0.85s ease-out forwards;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="bg-[#0e0a14] text-stone-100 min-h-screen overflow-hidden selection:bg-pink-500 selection:text-white" x-data="petalDriftGame()" x-init="initGame()">
+
+    <!-- TOP HUD -->
+    <header class="relative z-20 border-b border-white/10 bg-[#150f1e]/65 backdrop-blur-md">
+        <div class="max-w-6xl mx-auto px-4 py-2 flex items-center justify-between gap-3">
+            <!-- Extra-Large Calligraphy Title -->
+            <div class="flex items-center">
+                <span class="font-calligraphy text-6xl sm:text-7xl leading-none text-pink-200 drop-shadow-[0_2px_14px_rgba(244,114,182,0.5)]">
+                    PetalDrift
+                </span>
+            </div>
+
+            <div class="flex items-center gap-2 sm:gap-4 text-xs">
+                <div class="px-3.5 py-1.5 rounded-full bg-black/45 border border-pink-300/30 text-pink-100 font-semibold backdrop-blur-sm">
+                    Calm Points: <span class="font-game text-sm text-pink-300" x-text="calmPoints"></span>
+                </div>
+                <div class="hidden sm:block px-3.5 py-1.5 rounded-full bg-black/45 border border-white/15 text-stone-200 font-medium backdrop-blur-sm">
+                    Tapped: <span class="font-bold text-white" x-text="totalTapped"></span>
+                </div>
+                <button @click="toggleSound()"
+                    class="px-3 py-1.5 rounded-xl bg-black/45 hover:bg-black/65 border border-white/15 text-xs font-semibold text-stone-100 backdrop-blur-sm transition">
+                    <span x-text="soundEnabled ? '♪ Sound On' : '♪ Muted'"></span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN PLAYFIELD -->
+    <main class="relative h-[calc(100vh-4.75rem)] w-full flex flex-col justify-between p-4 sm:p-6">
+
+        <!-- Clear & Visible Backdrop Photo -->
+        <div class="absolute inset-0 pointer-events-none overflow-hidden">
+            <img :src="activeScene.url" :alt="activeScene.name" class="w-full h-full object-cover opacity-80 transition-all duration-500">
+            <div class="absolute inset-0 bg-gradient-to-b from-black/25 via-black/10 to-black/45"></div>
+        </div>
+
+        <!-- Theme Switcher at Top Right -->
+        <div class="relative z-10 flex justify-end">
+            <div class="flex items-center gap-1.5 bg-black/45 backdrop-blur-md border border-white/15 rounded-2xl p-1.5 w-fit">
+                <template x-for="scene in scenes" :key="scene.name">
+                    <button @click="selectScene(scene)"
+                        :class="activeScene.name === scene.name ? 'bg-pink-500 text-white shadow-sm' : 'text-stone-200 hover:text-white'"
+                        class="px-3 py-1 rounded-xl text-[11px] font-semibold transition"
+                        x-text="scene.name">
+                    </button>
+                </template>
+            </div>
+        </div>
+
+        <!-- FLOATING CLICKABLE ITEMS -->
+        <div class="relative flex-1 w-full z-10">
+            <template x-for="item in floatingItems" :key="item.id">
+                <button @click="collectItem(item, $event)"
+                    :style="`left: ${item.x}%; top: ${item.y}%; --dur: ${item.duration}s;`"
+                    class="drift-anim absolute -translate-x-1/2 -translate-y-1/2 group focus:outline-none transition-transform active:scale-125">
+                    <div :class="item.kind === 'lantern'
+                        ? 'w-14 h-14 rounded-2xl bg-amber-300/35 border-amber-200/60 text-amber-100 shadow-lg shadow-amber-500/20'
+                        : 'w-12 h-12 rounded-full bg-pink-400/35 border-pink-200/60 text-pink-100 shadow-lg shadow-pink-500/20'"
+                        class="backdrop-blur-md border flex items-center justify-center text-2xl group-hover:scale-110 transition-transform duration-200">
+                        <span x-text="item.emoji"></span>
+                    </div>
+                </button>
+            </template>
+
+            <!-- Floating +Calm Popups -->
+            <template x-for="pop in popups" :key="pop.id">
+                <div :style="`left: ${pop.x}px; top: ${pop.y}px;`"
+                    class="pop-text fixed z-30 font-game text-sm font-bold text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.8)]">
+                    +<span x-text="pop.amount"></span> calm
+                </div>
+            </template>
+        </div>
+
+        <!-- LARGE CALLIGRAPHY LIVE MOTIVATION QUOTE -->
+        <div class="relative z-10 max-w-4xl w-full mx-auto">
+            <button @click="nextQuote()" title="Tap for next quote"
+                class="w-full bg-black/45 hover:bg-black/60 backdrop-blur-md border border-white/15 rounded-3xl px-6 py-3.5 text-center transition shadow-2xl">
+                <p class="font-calligraphy text-3xl sm:text-5xl leading-snug text-pink-100 drop-shadow-[0_2px_10px_rgba(0,0,0,0.75)]" x-text="currentQuote"></p>
+            </button>
+        </div>
+
+    </main>
+
+    <script>
+        function petalDriftGame() {
+            return {
+                calmPoints: 0,
+                totalTapped: 0,
+                floatingItems: [],
+                popups: [],
+                nextId: 1,
+                soundEnabled: true,
+                audioCtx: null,
+                quoteIndex: 0,
+
+                quotes: [
+                    'Take it one gentle breath at a time—you are doing better than you think.',
+                    'Small steady steps still move you closer to everything you worked for.',
+                    'Rest is part of progress; give yourself permission to pause.',
+                    'Even quiet days have value when you keep showing up for yourself.',
+                    'You do not have to figure out everything tonight—just this moment.',
+                    'Softness is strength, especially when things feel heavy.',
+                    'Every calm mind makes clearer choices when the time comes.',
+                    'Let go of what you cannot control and nurture what is right in front of you.',
+                    'Progress does not always look loud; sometimes it looks like peace.',
+                    'Be patient with your timeline—blooming happens in its own season.',
+                    'A tired mind deserves kindness, not criticism.',
+                    'You have already survived one hundred percent of your hardest days.',
+                    'Keep your heart light and your focus steady.',
+                    'Clarity comes easier when you stop rushing yourself.',
+                    'Start fresh right now; every new minute is a clean page.'
+                ],
+
+                scenes: [
+                    {
+                        name: 'Twilight',
+                        url: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSDCLX3AkfsIg0gv6sEacXDqZYt9Qb10VTBB2oE-BkPPQ&s=10',
+                        soundStyle: 'twilight'
+                    },
+                    {
+                        name: 'Blossom',
+                        url: 'https://img.magnific.com/free-photo/beautiful-spring-landscape-with-blooming-flowers_23-2151913923.jpg?semt=ais_hybrid&w=740&q=80',
+                        soundStyle: 'blossom'
+                    },
+                    {
+                        name: 'Cozy Night',
+                        url: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTXN6GnWuvcvQIAXMqK1GJtiW4SijbndlMrclvsAkzJfQ&s=10',
+                        soundStyle: 'cozy'
+                    }
+                ],
+
+                activeScene: null,
+
+                get currentQuote() {
+                    return this.quotes[this.quoteIndex];
+                },
+
+                initGame() {
+                    this.activeScene = this.scenes[1];
+                    this.syncItems();
+                    setInterval(() => this.syncItems(), 1500);
+                    setInterval(() => this.nextQuote(), 7000);
+                },
+
+                nextQuote() {
+                    this.quoteIndex = (this.quoteIndex + 1) % this.quotes.length;
+                },
+
+                selectScene(scene) {
+                    this.activeScene = scene;
+                    this.playThemePreview();
+                },
+
+                syncItems() {
+                    while (this.floatingItems.length < 8) {
+                        this.floatingItems.push(this.createFloatingItem());
+                    }
+                },
+
+                createFloatingItem() {
+                    const isLantern = Math.random() < 0.25;
+                    const petalEmojis = ['🌸', '✿', '❀', '🌷'];
+                    return {
+                        id: this.nextId++,
+                        kind: isLantern ? 'lantern' : 'petal',
+                        emoji: isLantern ? '🏮' : petalEmojis[Math.floor(Math.random() * petalEmojis.length)],
+                        x: Math.floor(Math.random() * 78) + 11,
+                        y: Math.floor(Math.random() * 64) + 14,
+                        duration: (Math.random() * 3 + 4).toFixed(1)
+                    };
+                },
+
+                collectItem(item, event) {
+                    const gained = item.kind === 'lantern' ? 3 : 1;
+                    this.calmPoints += gained;
+                    this.totalTapped += 1;
+
+                    this.floatingItems = this.floatingItems.filter(i => i.id !== item.id);
+                    this.addPopup(event.clientX, event.clientY, gained);
+                    this.playTapSound(item.kind === 'lantern');
+                    this.syncItems();
+                },
+
+                addPopup(x, y, amount) {
+                    const id = this.nextId++;
+                    this.popups.push({ id, x, y, amount });
+                    setTimeout(() => {
+                        this.popups = this.popups.filter(p => p.id !== id);
+                    }, 850);
+                },
+
+                toggleSound() {
+                    this.soundEnabled = !this.soundEnabled;
+                },
+
+                ensureAudio() {
+                    if (!this.soundEnabled) return null;
+                    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                    if (!this.audioCtx) this.audioCtx = new AudioContextClass();
+                    if (this.audioCtx.state === 'suspended') {
+                        this.audioCtx.resume();
+                    }
+                    return this.audioCtx;
+                },
+
+                playTapSound(isLantern) {
+                    const ctx = this.ensureAudio();
+                    if (!ctx) return;
+
+                    const now = ctx.currentTime;
+                    const style = this.activeScene?.soundStyle || 'blossom';
+
+                    if (style === 'twilight') {
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(isLantern ? 440 : 329.63, now);
+                        osc.frequency.exponentialRampToValueAtTime(isLantern ? 587.33 : 392.0, now + 0.35);
+                        gain.gain.setValueAtTime(0.05, now);
+                        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc.start(now);
+                        osc.stop(now + 0.45);
+                    } else if (style === 'blossom') {
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(isLantern ? 880 : 659.25, now);
+                        gain.gain.setValueAtTime(0.045, now);
+                        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc.start(now);
+                        osc.stop(now + 0.25);
+                    } else {
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(isLantern ? 523.25 : 261.63, now);
+                        gain.gain.setValueAtTime(0.055, now);
+                        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc.start(now);
+                        osc.stop(now + 0.3);
+                    }
+                },
+
+                playThemePreview() {
+                    this.playTapSound(true);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
